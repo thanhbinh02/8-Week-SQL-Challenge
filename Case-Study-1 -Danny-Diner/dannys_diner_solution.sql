@@ -7,6 +7,7 @@ SELECT s.customer_id, SUM(m.price) AS total_amount
 FROM sales s
 INNER JOIN menu m ON s.product_id = m.product_id
 GROUP BY s.customer_id
+ORDER BY s.customer_id
 
 -- 2. How many days has each customer visited the restaurant?
 SELECT customer_id, COUNT(DISTINCT order_date) AS visited_days
@@ -133,9 +134,92 @@ WITH cte AS (
   	GROUP BY customer_id, product_id
 )
 
-SELECT customer_id, product_name, total_items, (total_items * price) AS total_amount
+SELECT customer_id, SUM(total_items * price) AS total_amount
 FROM cte
 JOIN menu USING(product_id)
-ORDER BY customer_id, product_name
+GROUP BY customer_id
+ORDER BY customer_id
 
 -- 9. If each $1 spent equates to 10 points and sushi has a 2x points multiplier - how many points would each customer have?
+WITH item_counts AS (
+	SELECT
+  		customer_id, 
+		product_id, 
+		COUNT(*) AS total_items
+	FROM sales
+  	GROUP BY customer_id, product_id
+),
+customer_points AS (
+	SELECT 
+		customer_id,
+		CASE 
+			WHEN product_name = 'sushi' THEN total_items * price * 20
+			ELSE total_items * price * 10
+		END AS points
+	FROM item_counts
+	JOIN menu USING(product_id)
+)
+SELECT 
+	customer_id, 
+	SUM(points) AS total_points
+FROM customer_points
+GROUP BY customer_id
+ORDER BY customer_id
+
+-- 10. In the first week after a customer joins the program (including their join date) they earn 2x points on all items, 
+-- not just sushi - how many points do customer A and B have at the end of January?
+	-- JOIN members m USING(customer_id)
+	-- WHERE m.join_date IS NOT NULL AND s.order_date >= m.join_date
+WITH memberships AS (
+	SELECT *
+	FROM sales s
+	JOIN members m USING(customer_id)
+	WHERE m.join_date IS NOT NULL AND s.order_date >= m.join_date
+),
+memberships_order_in_promotion AS (
+	SELECT
+  		customer_id, 
+		product_id, 
+		COUNT(*) AS total_items
+	FROM memberships
+	WHERE order_date BETWEEN join_date AND join_date + INTERVAL '6 DAY' 
+	  AND order_date < '2021-02-01'
+	GROUP BY customer_id, product_id
+),
+memberships_order_not_in_promotion AS (
+	SELECT
+  		customer_id, 
+		product_id, 
+		COUNT(*) AS total_items
+	FROM memberships
+	WHERE order_date NOT BETWEEN join_date AND join_date + INTERVAL '6 DAY'  
+	  AND order_date < '2021-02-01'
+	GROUP BY customer_id, product_id
+),
+memberships_points AS (
+	SELECT 
+		customer_id,
+		product_id,
+		total_items * price * 20 AS points  
+	FROM memberships_order_in_promotion
+	JOIN menu USING(product_id)
+
+	UNION ALL
+
+	SELECT 
+		customer_id,
+		product_id,
+		CASE 
+			WHEN product_name = 'sushi' THEN total_items * price * 20
+			ELSE total_items * price * 10
+		END AS points
+	FROM memberships_order_not_in_promotion
+	JOIN menu USING(product_id)
+)
+
+SELECT 
+	customer_id, 
+	SUM(points) AS total_points
+FROM memberships_points
+GROUP BY customer_id
+ORDER BY customer_id;
