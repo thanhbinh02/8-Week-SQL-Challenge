@@ -223,3 +223,40 @@ SELECT
 FROM memberships_points
 GROUP BY customer_id
 ORDER BY customer_id;
+
+/* --------------------
+   Bonus Questions
+   --------------------*/
+-- 1. Join All The Things
+SELECT s.customer_id, s.order_date, m.product_name, m.price,
+CASE
+    WHEN order_date >= join_date THEN 'Y'
+    ELSE 'N'
+END AS member
+FROM sales s
+INNER JOIN menu m USING(product_id)
+INNER JOIN members mb USING(customer_id)
+ORDER BY s.customer_id, s.order_date
+
+-- 2. Rank All The Things
+WITH cte AS (
+  SELECT 
+    s.customer_id, 
+    s.order_date, 
+    me.product_name, 
+    me.price,
+    CASE
+      WHEN s.order_date < m.join_date OR m.join_date IS NULL THEN 'N'
+      ELSE 'Y'
+    END AS member
+  FROM sales s
+  LEFT JOIN menu me USING (product_id)
+  LEFT JOIN members m USING (customer_id)
+)
+
+SELECT *,
+  CASE
+    WHEN member = 'Y' THEN DENSE_RANK() OVER (PARTITION BY customer_id, member ORDER BY order_date)
+    WHEN member = 'N' THEN NULL
+  END AS ranking
+FROM cte;
