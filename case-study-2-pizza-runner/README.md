@@ -86,3 +86,73 @@ This table contains all of the `topping_name` values with their corresponding `t
 | 10         | Salami       |
 | 11         | Tomatoes     |
 | 12         | Tomato Sauce |
+
+# Cleaned Dataset
+I remove all the blank spaces and replace all stringed (null/NaN) values as a NULL value for consistency
+## **customer_orders table**
+```sql
+CREATE TEMPORARY TABLE customer_orders_cleaned AS
+  SELECT 
+    order_id,
+    customer_id,
+    pizza_id,
+    CASE WHEN exclusions IN ('', 'null') THEN NULL
+    ELSE exclusions
+    END AS exclusions_cleaned,
+    CASE WHEN extras IN('', 'null', 'NaN') THEN NULL
+    ELSE extras
+    END AS extras_cleaned,
+    order_time
+  FROM customer_orders;
+```
+
+| order_id | customer_id | pizza_id | exclusions_cleaned | extras_cleaned | order_time           |
+|----------|-------------|----------|--------------------|----------------|----------------------|
+| 1        | 101         | 1        | null               | null           | 2020-01-01 18:05:02  |
+| 2        | 101         | 1        | null               | null           | 2020-01-01 19:00:52  |
+| 3        | 102         | 1        | null               | null           | 2020-01-02 23:51:23  |
+| 3        | 102         | 2        | null               | null           | 2020-01-02 23:51:23  |
+| 4        | 103         | 1        | 4                  | null           | 2020-01-04 13:23:46  |
+| 4        | 103         | 1        | 4                  | null           | 2020-01-04 13:23:46  |
+| 4        | 103         | 2        | 4                  | null           | 2020-01-04 13:23:46  |
+| 5        | 104         | 1        | null               | 1              | 2020-01-08 21:00:29  |
+| 6        | 101         | 2        | null               | null           | 2020-01-08 21:03:13  |
+| 7        | 105         | 2        | null               | 1              | 2020-01-08 21:20:29  |
+| 8        | 102         | 1        | null               | null           | 2020-01-09 23:54:33  |
+| 9        | 103         | 1        | 4                  | 1, 5           | 2020-01-10 11:22:59  |
+| 10       | 104         | 1        | null               | null           | 2020-01-11 18:34:49  |
+| 10       | 104         | 1        | 2, 6               | 1, 4           | 2020-01-11 18:34:49  |
+
+## **runner_orders table**
+```sql
+CREATE TEMPORARY TABLE runner_orders_cleaned AS
+  SELECT 
+    order_id,
+    runner_id,
+    CASE WHEN pickup_time = 'null' THEN NULL
+    ELSE pickup_time
+    END AS pickup_time_cleaned,
+    CASE WHEN distance = 'null' THEN NULL
+    ELSE distance
+    END AS distance_cleaned,
+    CASE WHEN duration = 'null' THEN NULL
+    ELSE duration
+    END AS duration_cleaned,
+    CASE WHEN cancellation IN ('null', '', 'NaN' ) THEN NULL
+    ELSE cancellation
+    END AS cancellation_cleaned
+  FROM runner_orders;
+```
+
+| order_id | runner_id | pickup_time_cleaned    | distance_cleaned | duration_cleaned | cancellation_cleaned    |
+|----------|-----------|-----------------------|------------------|------------------|------------------------|
+| 1        | 1         | 2020-01-01 18:15:34   | 20km             | 32 minutes       | null                   |
+| 2        | 1         | 2020-01-01 19:10:54   | 20km             | 27 minutes       | null                   |
+| 3        | 1         | 2020-01-03 00:12:37   | 13.4km           | 20 mins          | null                   |
+| 4        | 2         | 2020-01-04 13:53:03   | 23.4             | 40               | null                   |
+| 5        | 3         | 2020-01-08 21:10:57   | 10               | 15               | null                   |
+| 6        | 3         | null                  | null             | null             | Restaurant Cancellation |
+| 7        | 2         | 2020-01-08 21:30:45   | 25km             | 25mins           | null                   |
+| 8        | 2         | 2020-01-10 00:15:02   | 23.4 km          | 15 minute        | null                   |
+| 9        | 2         | null                  | null             | null             | Customer Cancellation   |
+| 10       | 1         | 2020-01-11 18:50:20   | 10km             | 10minutes        | null                   |
