@@ -156,3 +156,76 @@ CREATE TEMPORARY TABLE runner_orders_cleaned AS
 | 8        | 2         | 2020-01-10 00:15:02   | 23.4 km          | 15 minute        | null                   |
 | 9        | 2         | null                  | null             | null             | Customer Cancellation   |
 | 10       | 1         | 2020-01-11 18:50:20   | 10km             | 10minutes        | null                   |
+
+# A. Pizza Metrics
+## **1. How many pizzas were ordered?**
+```sql
+SELECT COUNT(*) AS pizzas_ordered
+FROM customer_orders;
+```
+| pizzas_ordered |
+|-------------   |
+| 14             | 
+
+## **2. How many unique customer orders were made?**
+```sql
+SELECT COUNT(DISTINCT order_id) as unique_orders_made
+FROM customer_orders;
+```
+| unique_orders_made |
+|-------------       |
+| 10                 | 
+
+## **3. How many successful orders were delivered by each runner?**
+```sql
+SELECT runner_id, COUNT(*) AS successful_orders_each_runner
+FROM runner_orders_cleaned
+WHERE pickup_time_cleaned IS NOT NULL AND cancellation_cleaned IS NULL
+GROUP BY runner_id;
+```
+| runner_id | successful_orders |
+|-----------|-------------------|
+| 1         | 4                 |
+| 2         | 3                 |
+| 3         | 1                 |
+
+## **4. How many of each type of pizza was delivered?**
+```sql
+SELECT coc.pizza_id, COUNT(*) AS pizza_delivered
+FROM customer_orders_cleaned coc
+INNER JOIN runner_orders_cleaned roc USING(order_id)
+WHERE roc.pickup_time_cleaned IS NOT NULL AND roc.cancellation_cleaned IS NULL
+GROUP BY coc.pizza_id;
+```
+| pizza_id | pizza_delivered   |
+|----------|-------------------|
+| 1        | 9                 |
+| 2        | 3                 |
+
+## **5. How many Vegetarian and Meatloaves were ordered by each customer?**
+```sql
+SELECT 
+  customer_id,
+  COUNT(CASE WHEN pizza_id = 1 THEN 1 END) AS meatlovers_ordered,
+  COUNT(CASE WHEN pizza_id = 2 THEN 1 END) AS vegetarian_ordered
+FROM customer_orders_cleaned
+GROUP BY customer_id
+ORDER BY customer_id;
+```
+| customer_id | meatlovers_ordered | vegetarian_ordered |
+|-------------|--------------------|---------------------|
+| 101         | 2                  | 1                   |
+| 102         | 2                  | 1                   |
+| 103         | 3                  | 1                   |
+| 104         | 3                  | 0                   |
+| 105         | 0                  | 1                   |
+
+# B. Runner and Customer Experience
+## **5. What was the difference between the longest and shortest delivery times for all orders?**
+```sql
+SELECT MAX(duration) - MIN(duration) AS delivery_time_diff
+FROM runner_orders_cleaned
+```
+| delivery_time_diff|
+|-------------------|
+| 30.00             |
