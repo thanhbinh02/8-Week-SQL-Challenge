@@ -17,6 +17,7 @@ CREATE TEMPORARY TABLE customer_orders_cleaned AS
     order_time
   FROM customer_orders;
 
+-- Cleaned version of runner_orders:
 CREATE TEMPORARY TABLE runner_orders_cleaned AS
   SELECT 
     order_id,
@@ -41,10 +42,6 @@ CREATE TEMPORARY TABLE runner_orders_cleaned AS
       ELSE cancellation
     END AS cancellation_cleaned
   FROM runner_orders;
-
-SELECT * FROM runner_orders_cleaned;
-
-
 
 
 /* --------------------
@@ -79,6 +76,62 @@ SELECT
 FROM customer_orders_cleaned
 GROUP BY customer_id
 ORDER BY customer_id;
+
+-- 6. What was the maximum number of pizzas delivered in a single order?
+WITH pizzas_per_order AS (
+  SELECT COUNT(*) AS pizza_count
+  FROM customer_orders
+  GROUP BY order_id
+) 
+SELECT MAX(pizza_count) AS max_pizzas_in_single_order
+FROM pizzas_per_order;
+
+-- 7. For each customer, how many delivered pizzas had at least 1 change and how many had no changes?
+SELECT 
+  customer_id, 
+  COUNT(CASE WHEN coc.exclusions_cleaned IS NOT NULL OR coc.extras_cleaned IS NOT NULL THEN 1 END) as total_pizzas_with_changes,
+  COUNT(CASE WHEN coc.exclusions_cleaned IS NULL AND coc.extras_cleaned IS NULL THEN 1 END) as total_pizzas_no_changes
+FROM customer_orders_cleaned coc
+INNER JOIN runner_orders_cleaned roc USING(order_id)
+WHERE roc.cancellation_cleaned IS NULL
+GROUP BY customer_id;
+
+-- 8. How many pizzas were delivered that had both exclusions and extras?
+SELECT 
+ COUNT(CASE WHEN coc.exclusions_cleaned IS NOT NULL AND coc.extras_cleaned IS NOT NULL THEN 1 END) as total_pizzas_both_exclusions_extras
+FROM customer_orders_cleaned coc
+INNER JOIN runner_orders_cleaned roc USING(order_id)
+WHERE roc.cancellation_cleaned IS NULL
+
+-- 9. What was the total volume of pizzas ordered for each hour of the day?
+WITH RECURSIVE cte AS (
+  SELECT 0 AS hour
+  UNION ALL
+  SELECT hour + 1
+  FROM cte
+  WHERE hour < 23
+)
+
+SELECT cte.hour as hour,  COUNT(CASE WHEN co.order_id IS NOT NULL THEN 1 END) as total_ordered
+FROM cte
+LEFT JOIN customer_orders co ON EXTRACT(HOUR FROM co.order_time) = cte.hour
+GROUP BY  cte.hour
+ORDER BY cte.hour
+
+-- 10. What was the volume of orders for each day of the week?
+WITH RECURSIVE cte AS (
+  SELECT 0 AS day
+  UNION ALL
+  SELECT day + 1
+  FROM cte
+  WHERE day < 6
+)
+
+SELECT cte.day as day,  COUNT(CASE WHEN co.order_id IS NOT NULL THEN 1 END) as total_ordered
+FROM cte
+LEFT JOIN customer_orders co ON EXTRACT(DOW FROM order_time) = cte.day
+GROUP BY  cte.day
+ORDER BY cte.day
 
 /* --------------------
   B. Runner and Customer Experience

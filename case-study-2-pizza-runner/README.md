@@ -129,33 +129,41 @@ CREATE TEMPORARY TABLE runner_orders_cleaned AS
   SELECT 
     order_id,
     runner_id,
-    CASE WHEN pickup_time = 'null' THEN NULL
-    ELSE pickup_time
+    CASE 
+      WHEN pickup_time = 'null' THEN NULL
+      ELSE pickup_time
     END AS pickup_time_cleaned,
-    CASE WHEN distance = 'null' THEN NULL
-    ELSE distance
+    
+    CASE 
+      WHEN distance = 'null' THEN NULL
+      ELSE CAST(regexp_replace(distance, '(km|\\s+)', '', 'gi') AS DECIMAL(5,2))
     END AS distance_cleaned,
-    CASE WHEN duration = 'null' THEN NULL
-    ELSE duration
+    
+    CASE 
+      WHEN duration = 'null' THEN NULL
+      ELSE CAST(regexp_replace(duration, '(minutes|minute|mins|min|\\s+)', '', 'gi') AS DECIMAL(5,2))
     END AS duration_cleaned,
-    CASE WHEN cancellation IN ('null', '', 'NaN' ) THEN NULL
-    ELSE cancellation
+    
+    CASE 
+      WHEN cancellation IN ('null', '', 'NaN') THEN NULL
+      ELSE cancellation
     END AS cancellation_cleaned
   FROM runner_orders;
 ```
 
-| order_id | runner_id | pickup_time_cleaned    | distance_cleaned | duration_cleaned | cancellation_cleaned    |
-|----------|-----------|-----------------------|------------------|------------------|------------------------|
-| 1        | 1         | 2020-01-01 18:15:34   | 20km             | 32 minutes       | null                   |
-| 2        | 1         | 2020-01-01 19:10:54   | 20km             | 27 minutes       | null                   |
-| 3        | 1         | 2020-01-03 00:12:37   | 13.4km           | 20 mins          | null                   |
-| 4        | 2         | 2020-01-04 13:53:03   | 23.4             | 40               | null                   |
-| 5        | 3         | 2020-01-08 21:10:57   | 10               | 15               | null                   |
-| 6        | 3         | null                  | null             | null             | Restaurant Cancellation |
-| 7        | 2         | 2020-01-08 21:30:45   | 25km             | 25mins           | null                   |
-| 8        | 2         | 2020-01-10 00:15:02   | 23.4 km          | 15 minute        | null                   |
-| 9        | 2         | null                  | null             | null             | Customer Cancellation   |
-| 10       | 1         | 2020-01-11 18:50:20   | 10km             | 10minutes        | null                   |
+| order_id | runner_id | pickup_time_cleaned   | distance_cleaned | duration_cleaned | cancellation_cleaned       |
+|----------|-----------|------------------------|------------------|------------------|-----------------------------|
+| 1        | 1         | 2020-01-01 18:15:34    | 20.00            | 32.00            | null                        |
+| 2        | 1         | 2020-01-01 19:10:54    | 20.00            | 27.00            | null                        |
+| 3        | 1         | 2020-01-03 00:12:37    | 13.40            | 20.00            | null                        |
+| 4        | 2         | 2020-01-04 13:53:03    | 23.40            | 40.00            | null                        |
+| 5        | 3         | 2020-01-08 21:10:57    | 10.00            | 15.00            | null                        |
+| 6        | 3         | null                   | null             | null             | Restaurant Cancellation     |
+| 7        | 2         | 2020-01-08 21:30:45    | 25.00            | 25.00            | null                        |
+| 8        | 2         | 2020-01-10 00:15:02    | 23.40            | 15.00            | null                        |
+| 9        | 2         | null                   | null             | null             | Customer Cancellation       |
+| 10       | 1         | 2020-01-11 18:50:20    | 10.00            | 10.00            | null                        |
+
 
 # A. Pizza Metrics
 ## **1. How many pizzas were ordered?**
@@ -220,6 +228,121 @@ ORDER BY customer_id;
 | 104         | 3                  | 0                   |
 | 105         | 0                  | 1                   |
 
+## **6. What was the maximum number of pizzas delivered in a single order?**
+```sql
+WITH pizzas_per_order AS (
+  SELECT COUNT(*) AS pizza_count
+  FROM customer_orders
+  GROUP BY order_id
+) 
+SELECT MAX(pizza_count) AS max_pizzas_in_single_order
+FROM pizzas_per_order;
+
+```
+| max_pizzas_in_single_order |
+|-------------------------   |
+| 3                          | 
+
+## **7. For each customer, how many delivered pizzas had at least 1 change and how many had no changes?**
+```sql
+SELECT 
+  customer_id, 
+  COUNT(CASE WHEN coc.exclusions_cleaned IS NOT NULL OR coc.extras_cleaned IS NOT NULL THEN 1 END) as total_pizzas_with_changes,
+  COUNT(CASE WHEN coc.exclusions_cleaned IS NULL AND coc.extras_cleaned IS NULL THEN 1 END) as total_pizzas_no_changes
+FROM customer_orders_cleaned coc
+INNER JOIN runner_orders_cleaned roc USING(order_id)
+WHERE roc.cancellation_cleaned IS NULL
+GROUP BY customer_id;
+```
+| customer_id | total_pizzas_with_changes | total_pizzas_no_changes |
+|-------------|---------------------------|-------------------------|
+| 101         | 0                         | 2                       |
+| 102         | 0                         | 3                       |
+| 103         | 3                         | 0                       |
+| 104         | 2                         | 1                       |
+| 105         | 1                         | 0                       |
+
+## **8. How many pizzas were delivered that had both exclusions and extras?**
+```sql
+SELECT 
+ COUNT(CASE WHEN coc.exclusions_cleaned IS NOT NULL AND coc.extras_cleaned IS NOT NULL THEN 1 END) as total_pizzas_both_exclusions_extras
+FROM customer_orders_cleaned coc
+INNER JOIN runner_orders_cleaned roc USING(order_id)
+WHERE roc.cancellation_cleaned IS NULL
+```
+| total_pizzas_both_exclusions_extras |
+|-------------------------            |
+| 1                                   | 
+
+## **9. What was the total volume of pizzas ordered for each hour of the day?**
+```sql
+WITH RECURSIVE cte AS (
+  SELECT 0 AS hour
+  UNION ALL
+  SELECT hour + 1
+  FROM cte
+  WHERE hour < 23
+)
+
+SELECT cte.hour as hour,  COUNT(CASE WHEN co.order_id IS NOT NULL THEN 1 END) as total_ordered
+FROM cte
+LEFT JOIN customer_orders co ON EXTRACT(HOUR FROM co.order_time) = cte.hour
+GROUP BY  cte.hour
+ORDER BY cte.hour
+```
+| hour | total_ordered |
+|------|----------------|
+| 0    | 0              |
+| 1    | 0              |
+| 2    | 0              |
+| 3    | 0              |
+| 4    | 0              |
+| 5    | 0              |
+| 6    | 0              |
+| 7    | 0              |
+| 8    | 0              |
+| 9    | 0              |
+| 10   | 0              |
+| 11   | 1              |
+| 12   | 0              |
+| 13   | 3              |
+| 14   | 0              |
+| 15   | 0              |
+| 16   | 0              |
+| 17   | 0              |
+| 18   | 3              |
+| 19   | 1              |
+| 20   | 0              |
+| 21   | 3              |
+| 22   | 0              |
+| 23   | 3              |
+
+## **10. What was the volume of orders for each day of the week?**
+```sql
+WITH RECURSIVE cte AS (
+  SELECT 0 AS day
+  UNION ALL
+  SELECT day + 1
+  FROM cte
+  WHERE day < 6
+)
+
+SELECT cte.day as day,  COUNT(CASE WHEN co.order_id IS NOT NULL THEN 1 END) as total_ordered
+FROM cte
+LEFT JOIN customer_orders co ON EXTRACT(DOW FROM order_time) = cte.day
+GROUP BY  cte.day
+ORDER BY cte.day
+```
+| day | total_ordered |
+|-----|----------------|
+| 0   | 0              |
+| 1   | 0              |
+| 2   | 0              |
+| 3   | 5              |
+| 4   | 3              |
+| 5   | 1              |
+| 6   | 5              |
+
 # B. Runner and Customer Experience
 ## **5. What was the difference between the longest and shortest delivery times for all orders?**
 ```sql
@@ -229,3 +352,9 @@ FROM runner_orders_cleaned
 | delivery_time_diff|
 |-------------------|
 | 30.00             |
+
+
+
+
+
+
