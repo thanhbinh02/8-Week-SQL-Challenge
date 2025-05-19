@@ -139,3 +139,34 @@ ORDER BY cte.day
 -- 5. What was the difference between the longest and shortest delivery times for all orders?
 SELECT MAX(duration_cleaned) - MIN(duration_cleaned) AS delivery_time_diff
 FROM runner_orders_cleaned
+
+-- 1. How many runners signed up for each 1 week period? (i.e. week starts 2021-01-01)
+WITH RECURSIVE cte AS (
+    SELECT 
+        DATE '2021-01-01' AS start_date, 
+        DATE '2021-01-01' + INTERVAL '6 days' AS end_date
+    UNION ALL
+    SELECT 
+        (end_date + INTERVAL '1 day')::DATE, 
+        (end_date + INTERVAL '7 days')::DATE
+    FROM cte 
+    WHERE end_date < DATE '2021-01-31'
+)
+
+SELECT
+  ROW_NUMBER() OVER(ORDER BY start_date) AS week,
+  start_date,
+  end_date,
+  SUM(CASE WHEN r.registration_date IS NOT NULL THEN 1 ELSE 0 END) as total_runners_signed_up
+FROM cte
+LEFT JOIN runners r ON r.registration_date BETWEEN start_date AND end_date
+GROUP BY start_date, end_date
+
+-- 2. What was the average time in minutes it took for each runner to arrive at the Pizza Runner HQ to pickup the order?
+SELECT
+  r.runner_id, 
+  ROUND(AVG(EXTRACT(EPOCH FROM (r.pickup_time_cleaned::timestamp - c.order_time)) / 60)::numeric ,2) AS avg_minutes_diff
+FROM customer_orders_cleaned c
+LEFT JOIN runner_orders_cleaned r USING(order_id)
+WHERE r.pickup_time_cleaned  IS NOT NULL AND r.cancellation_cleaned IS NULL
+GROUP BY r.runner_id
