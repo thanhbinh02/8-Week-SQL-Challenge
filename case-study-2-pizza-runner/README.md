@@ -344,15 +344,6 @@ ORDER BY cte.day
 | 6   | 5              |
 
 # B. Runner and Customer Experience
-## **5. What was the difference between the longest and shortest delivery times for all orders?**
-```sql
-SELECT MAX(duration) - MIN(duration) AS delivery_time_diff
-FROM runner_orders_cleaned
-```
-| delivery_time_diff|
-|-------------------|
-| 30.00             |
-
 ## **1. How many runners signed up for each 1 week period? (i.e. week starts 2021-01-01)**
 ```sql
 WITH RECURSIVE cte AS (
@@ -399,6 +390,89 @@ GROUP BY r.runner_id
 | 1         | 15.68            |
 | 2         | 23.72            |
 | 3         | 10.47            |
+
+## **3. Is there any relationship between the number of pizzas and how long the order takes to prepare?**
+```sql
+WITH cte AS (
+  SELECT 
+    order_id, 
+    COUNT(pizza_id) as total_pizzas, 
+    r.pickup_time_cleaned, c.order_time,
+    EXTRACT(EPOCH FROM (r.pickup_time_cleaned::timestamp - c.order_time)) / 60 AS minutes_diff
+  FROM customer_orders c
+  INNER JOIN runner_orders_cleaned r USING (order_id)
+  WHERE r.pickup_time_cleaned IS NOT NULL
+  GROUP BY order_id, r.pickup_time_cleaned, c.order_time
+  ORDER BY order_id
+)
+
+SELECT total_pizzas, ROUND(AVG(minutes_diff), 2)
+FROM cte
+GROUP BY total_pizzas
+```
+| total_pizzas | round |
+|--------------|-------|
+| 3            | 29.28 |
+| 2            | 18.38 |
+| 1            | 12.36 |
+
+
+## **4. What was the average distance traveled for each customer?**
+```sql
+SELECT 
+  customer_id,
+  ROUND(AVG(distance_cleaned), 2) AS ave_distance_traveled
+FROM customer_orders c
+INNER JOIN runner_orders_cleaned r USING (order_id)
+WHERE r.pickup_time_cleaned IS NOT NULL
+GROUP BY customer_id
+ORDER BY customer_id
+```
+| customer_id | ave_distance_traveled  |
+|-------------|------------------------|
+| 101         | 20.00                  |
+| 102         | 16.73                  |
+| 103         | 23.40                  |
+| 104         | 10.00                  |
+| 105         | 25.00                  |
+
+## **5. What was the difference between the longest and shortest delivery times for all orders?**
+```sql
+SELECT MAX(duration) - MIN(duration) AS delivery_time_diff
+FROM runner_orders_cleaned
+```
+| delivery_time_diff|
+|-------------------|
+| 30.00             |
+
+## **6. What was the average speed for each runner for each delivery and do you notice any trend for these values?**
+```sql
+WITH cte AS (
+  SELECT 
+    order_id, 
+    runner_id, 
+    distance_cleaned,
+    duration_cleaned,
+    distance_cleaned / duration_cleaned  AS speed
+  FROM runner_orders_cleaned r
+  WHERE pickup_time_cleaned IS NOT NULL
+)
+
+SELECT runner_id, ROUND(AVG(speed), 2) average_speed
+FROM cte
+GROUP BY runner_id
+ORDER BY runner_id
+```
+| runner_id | average_speed |
+|-----------|----------------|
+| 1         | 0.76           |
+| 2         | 1.05           |
+| 3         | 0.67           |
+
+
+
+
+
 
 
 
